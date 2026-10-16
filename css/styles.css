@@ -2164,6 +2164,33 @@ code {
   font-size: var(--text-xl);
 }
 
+.customizer-qty-input {
+  max-width: 140px;
+  font-weight: 800;
+  font-size: var(--text-base);
+  text-align: center;
+}
+
+.btn--whatsapp {
+  background-color: #25D366;
+  color: #111B21;
+  border-color: var(--color-black);
+  box-shadow: var(--shadow-btn);
+  font-weight: 800;
+}
+
+.btn--whatsapp:hover {
+  background-color: #20BA5A;
+  color: #0B141A;
+}
+
+.variant-pill.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+  filter: grayscale(0.8);
+}
+
 /* Detalle de producto */
 .detail-modal__container {
   width: min(94vw, 860px);

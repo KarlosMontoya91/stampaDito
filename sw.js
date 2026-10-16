@@ -8,7 +8,7 @@
  * - Imágenes y recursos gráficos: Stale-While-Revalidate para respuesta instantánea en móvil.
  */
 
-const CACHE_NAME = 'stampadito-prod-v1';
+const CACHE_NAME = 'stampadito-prod-v2';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -18,14 +18,14 @@ const CORE_ASSETS = [
   './site.webmanifest',
   './assets/favicon.svg',
   './assets/logo-stampadito.svg',
-  './assets/tazas-recortadas/taza-botanica-camila.png',
-  './assets/tazas-recortadas/taza-mascota-bruno.png',
-  './assets/tazas-recortadas/taza-nombre-mateo.png',
-  './assets/tazas-recortadas/taza-geometria-color.png',
-  './assets/tazas-recortadas/taza-ilustracion-gatito.png',
-  './assets/tazas-recortadas/taza-regalo-polaroid.png',
-  './assets/tazas-recortadas/taza-negocio-estudio.png',
-  './assets/tazas-recortadas/taza-banner-sol.png'
+  './assets/tazas-recortadas/taza-botanica-camila.webp',
+  './assets/tazas-recortadas/taza-mascota-bruno.webp',
+  './assets/tazas-recortadas/taza-nombre-mateo.webp',
+  './assets/tazas-recortadas/taza-geometria-color.webp',
+  './assets/tazas-recortadas/taza-ilustracion-gatito.webp',
+  './assets/tazas-recortadas/taza-regalo-polaroid.webp',
+  './assets/tazas-recortadas/taza-negocio-estudio.webp',
+  './assets/tazas-recortadas/taza-banner-sol.webp'
 ];
 
 self.addEventListener('install', (event) => {

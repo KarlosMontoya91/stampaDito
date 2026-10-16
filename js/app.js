@@ -1,15 +1,6 @@
 /**
  * StampaDito — Lógica de interacción del sitio (js/app.js)
  * ---------------------------------------------------------
- * Funcionalidades:
- * 1. Cintilla promocional configurable con control accesible de pausa/reanudación.
- * 2. Menú móvil accesible con cierre con tecla Escape y sincronización ARIA.
- * 3. Filtrado de catálogo por colecciones desde el mosaico, filtros y pie de página.
- * 4. Selección de variantes en tarjetas de producto con actualización de precio y acabado.
- * 5. Modal de detalle de producto y modal personalizador interactivo (nombre, frase, fuente, carga de imagen).
- * 6. Carrito local persistente en localStorage (alcance prototipo sin simular cobros reales).
- * 7. Animaciones suaves al hacer scroll mediante IntersectionObserver y movimiento sutil en el Hero,
- *    respetando prefers-reduced-motion y garantizando visibilidad total si JS falla.
  */
 
 (function () {
@@ -18,7 +9,7 @@
   const DATA = window.STAMPADITO_DATA;
   if (!DATA) return;
 
-  const STORAGE_KEY = 'stampadito_cart_v1';
+  const STORAGE_KEY = 'stampadito_cart_v2';
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   // Estado de la aplicación
@@ -27,25 +18,15 @@
     selectedVariantsByCard: {},
     customizer: {
       productId: DATA.products[0].id,
-      variantId: DATA.products[0].variants[0].id,
-      customName: DATA.products[0].defaultCustomText || 'CAMILA',
-      customPhrase: '',
-      fontStyle: 'editorial',
+      colorId: DATA.cupColors[0].id,
+      copies: 1,
       uploadedImageDataUrl: null,
       uploadedImageName: '',
       notes: ''
     },
     detailProduct: null,
-    detailVariantId: null,
     cart: loadCartFromStorage()
   };
-
-  // Inicializar variantes por defecto para cada producto
-  DATA.products.forEach((p) => {
-    if (p.variants && p.variants.length > 0) {
-      state.selectedVariantsByCard[p.id] = p.variants[0].id;
-    }
-  });
 
   // =========================================================================
   // Utilidades
@@ -59,15 +40,12 @@
     return DATA.products.find((p) => p.id === productId) || DATA.products[0];
   }
 
-  function getVariant(product, variantId) {
-    if (!product || !product.variants) return null;
-    return product.variants.find((v) => v.id === variantId) || product.variants[0];
+  function getColorById(colorId) {
+    return DATA.cupColors.find((c) => c.id === colorId) || DATA.cupColors[0];
   }
 
-  function computePrice(product, variantId) {
-    const variant = getVariant(product, variantId);
-    const delta = variant ? variant.priceDelta || 0 : 0;
-    return product.price + delta;
+  function computeUnitPrice(product) {
+    return product ? product.price : 150;
   }
 
   function showToast(message) {
@@ -79,11 +57,47 @@
     region.appendChild(toast);
     setTimeout(() => {
       toast.remove();
-    }, 3400);
+    }, 3600);
+  }
+
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  // Generador de URL de WhatsApp con mensaje estructurado
+  function buildWhatsAppQuoteUrl(items, totalEstimated) {
+    const phone = DATA.meta.whatsappPhone || '5215500000000';
+    let text = `¡Hola StampaDito! 👋 Quisiera solicitar la cotización para mi pedido de tazas personalizadas:\n\n`;
+
+    items.forEach((item, idx) => {
+      text += `☕ *Item ${idx + 1}:* ${item.productName}\n`;
+      text += `   • Cantidad: *${item.quantity} ${item.quantity === 1 ? 'taza' : 'tazas'}*\n`;
+      if (item.colorLabel) {
+        text += `   • Color interior y asa: *${item.colorLabel}*\n`;
+      }
+      if (item.customization && item.customization.uploadedImageName) {
+        text += `   • Imagen adjunta: *${item.customization.uploadedImageName}* (te la comparto por aquí)\n`;
+      }
+      if (item.customization && item.customization.notes) {
+        text += `   • Idea / Notas: "${item.customization.notes}"\n`;
+      }
+      text += `   • Subtotal estimado: ${formatCurrency(item.unitPrice * item.quantity)}\n\n`;
+    });
+
+    text += `💰 *Total estimado de tazas:* ${formatCurrency(totalEstimated)} MXN\n`;
+    text += `📍 *Envío:* Por favor indíquenme el costo de envío a mi código postal o ciudad.\n\n`;
+    text += `¡Quedo atento(a) para enviarles la imagen y confirmar mi pedido!`;
+
+    return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
   }
 
   // =========================================================================
-  // 1. Cintilla promocional (Pausa / Reanudar accesible + Configuración desde DATA)
+  // 1. Cintilla promocional
   // =========================================================================
   function initPromoBar() {
     const promoBar = document.querySelector('.promo-bar');
@@ -95,7 +109,6 @@
 
     if (!promoBar || !toggleBtn) return;
 
-    // Sincronizar mensajes desde DATA.promoBar si están definidos
     if (DATA.promoBar && Array.isArray(DATA.promoBar.items) && DATA.promoBar.items.length > 0 && primaryGroup && cloneGroup) {
       const buildItemsHtml = (isClone) =>
         DATA.promoBar.items
@@ -122,17 +135,8 @@
     });
   }
 
-  function escapeHtml(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
   // =========================================================================
-  // 2. Navegación y Menú Móvil Accesible
+  // 2. Menú Móvil
   // =========================================================================
   function initMobileMenu() {
     const menuBtn = document.getElementById('mobileMenuBtn');
@@ -173,7 +177,7 @@
   }
 
   // =========================================================================
-  // 3. Catálogo: Filtrado por Colección y Selección de Variantes
+  // 3. Catálogo e Interacciones
   // =========================================================================
   function initCatalogInteractions() {
     const filterButtons = document.querySelectorAll('[data-filter]');
@@ -209,7 +213,6 @@
       });
     });
 
-    // Enlaces en tarjetas del mosaico y en el pie de página que filtran colecciones
     document.querySelectorAll('[data-filter-collection]').forEach((link) => {
       link.addEventListener('click', (e) => {
         const colId = link.getAttribute('data-filter-collection');
@@ -219,142 +222,123 @@
         }
       });
     });
-
-    // Swatches de variantes en cada tarjeta de producto
-    productCards.forEach((card) => {
-      const productId = card.getAttribute('data-product-id');
-      const product = getProductById(productId);
-      const priceEl = card.querySelector('[data-price-display]');
-      const variantNameEl = card.querySelector('[data-variant-name]');
-      const swatches = card.querySelectorAll('.swatch[data-variant-id]');
-
-      swatches.forEach((swatch) => {
-        swatch.addEventListener('click', () => {
-          const variantId = swatch.getAttribute('data-variant-id');
-          state.selectedVariantsByCard[productId] = variantId;
-
-          swatches.forEach((s) => {
-            const active = s === swatch;
-            s.classList.toggle('is-selected', active);
-            s.setAttribute('aria-pressed', String(active));
-          });
-
-          const variant = getVariant(product, variantId);
-          const totalPrice = computePrice(product, variantId);
-
-          if (variantNameEl && variant) {
-            variantNameEl.textContent = variant.label;
-          }
-          if (priceEl) {
-            priceEl.innerHTML = `$${totalPrice} <span class="product-card__currency">${DATA.meta.currency.suffix}</span>`;
-          }
-        });
-      });
-    });
   }
 
   // =========================================================================
-  // 4. Modal Personalizador Interactivo
+  // 4. Modal Personalizador Interactivo (Ajustado a requerimientos)
   // =========================================================================
   function initCustomizerModal() {
     const dialog = document.getElementById('customizerDialog');
     const form = document.getElementById('customizerForm');
     const productSelect = document.getElementById('customProductSelect');
     const variantsContainer = document.getElementById('customizerVariantsContainer');
-    const nameInput = document.getElementById('customNameInput');
-    const fontSelect = document.getElementById('customFontSelect');
-    const phraseInput = document.getElementById('customPhraseInput');
+    const variantHelp = document.getElementById('customVariantHelp');
+    const copiesInput = document.getElementById('customCopiesInput');
     const imageInput = document.getElementById('customImageInput');
     const imageStatus = document.getElementById('customImageStatus');
     const clearImageBtn = document.getElementById('clearCustomImageBtn');
     const notesInput = document.getElementById('customNotesInput');
     const priceDisplay = document.getElementById('customizerPriceDisplay');
+    const submitBtn = document.getElementById('customizerSubmitBtn');
+    const directWhatsAppBtn = document.getElementById('customizerDirectWhatsAppBtn');
 
     // Elementos de vista previa
     const stage = document.getElementById('customizerStage');
     const previewModelName = document.getElementById('customizerPreviewModelName');
     const baseImage = document.getElementById('customizerBaseImage');
-    const userPhotoWrap = document.getElementById('customizerUserPhotoWrap');
-    const userPhoto = document.getElementById('customizerUserPhoto');
-    const previewName = document.getElementById('previewCustomName');
-    const previewPhrase = document.getElementById('previewCustomPhrase');
 
     if (!dialog || !form || !productSelect) return;
 
-    // Poblar selector de modelos
+    // Poblar selector de tipos de taza
     productSelect.innerHTML = DATA.products
-      .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} — Base $${p.price} MXN</option>`)
+      .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} — $${p.price} MXN</option>`)
       .join('');
 
-    function renderVariantPills(product) {
+    function renderColorPills() {
+      const product = getProductById(state.customizer.productId);
+      const isBicolor = product.isColorCustomizable;
+
       variantsContainer.innerHTML = '';
-      product.variants.forEach((v) => {
+
+      if (!isBicolor) {
+        if (variantHelp) {
+          variantHelp.textContent = 'Este modelo es 100% blanco por dentro y por fuera. Opción de color bloqueada.';
+          variantHelp.style.color = '#B25E00';
+        }
+      } else {
+        if (variantHelp) {
+          variantHelp.textContent = 'Selecciona el color para el fondo interior y el asa (10 colores disponibles):';
+          variantHelp.style.color = '';
+        }
+      }
+
+      DATA.cupColors.forEach((c) => {
         const btn = document.createElement('button');
         btn.type = 'button';
-        const isActive = v.id === state.customizer.variantId;
-        btn.className = `variant-pill${isActive ? ' is-active' : ''}`;
+        const isActive = isBicolor ? c.id === state.customizer.colorId : c.id === 'blanco';
+        btn.className = `variant-pill${isActive ? ' is-active' : ''}${!isBicolor ? ' is-disabled' : ''}`;
         btn.setAttribute('role', 'radio');
         btn.setAttribute('aria-checked', String(isActive));
-        const deltaText = v.priceDelta > 0 ? ` (+$${v.priceDelta})` : v.priceDelta < 0 ? ` (-$${Math.abs(v.priceDelta)})` : '';
-        btn.innerHTML = `<span class="variant-pill__dot" style="background-color: ${v.colorHex}"></span><span>${escapeHtml(
-          v.label + deltaText
+        if (!isBicolor) {
+          btn.setAttribute('aria-disabled', 'true');
+          btn.tabIndex = -1;
+        }
+
+        btn.innerHTML = `<span class="variant-pill__dot" style="background-color: ${c.colorHex}"></span><span>${escapeHtml(
+          c.label
         )}</span>`;
-        btn.addEventListener('click', () => {
-          state.customizer.variantId = v.id;
-          renderVariantPills(product);
-          updateCustomizerPreview();
-        });
+
+        if (isBicolor) {
+          btn.addEventListener('click', () => {
+            state.customizer.colorId = c.id;
+            renderColorPills();
+            updateCustomizerPreview();
+          });
+        }
+
         variantsContainer.appendChild(btn);
       });
     }
 
     function updateCustomizerPreview() {
       const product = getProductById(state.customizer.productId);
-      const price = computePrice(product, state.customizer.variantId);
+      const color = getColorById(state.customizer.colorId);
+      const isBicolor = product.isColorCustomizable;
+      const copies = Math.max(1, parseInt(copiesInput.value, 10) || 1);
+      const unitPrice = computeUnitPrice(product);
+      const subtotal = unitPrice * copies;
 
-      if (stage) stage.setAttribute('data-theme', product.accentTheme || 'pink');
-      if (previewModelName) previewModelName.textContent = product.name;
+      if (previewModelName) {
+        previewModelName.textContent = isBicolor ? `${product.name} (${color.label})` : product.name;
+      }
+
+      // Actualizar imagen y fondo con contraste suave adaptativo
       if (baseImage) {
-        baseImage.src = product.image;
-        baseImage.alt = product.imageAlt;
-      }
-
-      const displayText = (nameInput.value || '').trim() || product.defaultCustomText || 'TU IDEA';
-      if (previewName) {
-        previewName.textContent = displayText;
-        previewName.classList.toggle('is-sans', fontSelect.value === 'modern');
-      }
-
-      const phraseText = (phraseInput.value || '').trim();
-      if (previewPhrase) {
-        previewPhrase.textContent = phraseText;
-        previewPhrase.hidden = phraseText.length === 0;
-      }
-
-      if (state.customizer.uploadedImageDataUrl && userPhoto && userPhotoWrap) {
-        userPhoto.src = state.customizer.uploadedImageDataUrl;
-        userPhotoWrap.hidden = false;
-      } else if (userPhotoWrap) {
-        userPhotoWrap.hidden = true;
+        if (!isBicolor) {
+          baseImage.src = product.image;
+          baseImage.alt = product.imageAlt;
+          if (stage) stage.style.backgroundColor = '#F5F4EE';
+        } else {
+          baseImage.src = color.image;
+          baseImage.alt = `Taza bicolor con asa e interior color ${color.label}`;
+          if (stage) stage.style.backgroundColor = color.bgStage;
+        }
       }
 
       if (priceDisplay) {
-        priceDisplay.textContent = formatCurrency(price);
+        priceDisplay.textContent = `${formatCurrency(subtotal)} (${copies} ${copies === 1 ? 'taza' : 'tazas'})`;
       }
     }
 
     function openCustomizer(productId) {
-      const product = getProductById(productId || state.customizer.productId);
-      state.customizer.productId = product.id;
-      state.customizer.variantId = state.selectedVariantsByCard[product.id] || product.variants[0].id;
-      productSelect.value = product.id;
+      const targetId = productId && DATA.products.some((p) => p.id === productId) ? productId : DATA.products[0].id;
+      state.customizer.productId = targetId;
+      productSelect.value = targetId;
 
-      if (!nameInput.value || nameInput.dataset.autoFilled === 'true') {
-        nameInput.value = product.defaultCustomText || 'CAMILA';
-        nameInput.dataset.autoFilled = 'true';
-      }
+      const product = getProductById(targetId);
+      state.customizer.colorId = product.isColorCustomizable ? (state.customizer.colorId || 'rosa') : 'blanco';
 
-      renderVariantPills(product);
+      renderColorPills();
       updateCustomizerPreview();
 
       if (typeof dialog.showModal === 'function') {
@@ -375,23 +359,24 @@
     productSelect.addEventListener('change', () => {
       const product = getProductById(productSelect.value);
       state.customizer.productId = product.id;
-      state.customizer.variantId = product.variants[0].id;
-      if (nameInput.dataset.autoFilled === 'true') {
-        nameInput.value = product.defaultCustomText || '';
+      if (!product.isColorCustomizable) {
+        state.customizer.colorId = 'blanco';
+      } else if (state.customizer.colorId === 'blanco') {
+        state.customizer.colorId = 'rosa';
       }
-      renderVariantPills(product);
+      renderColorPills();
       updateCustomizerPreview();
     });
 
-    nameInput.addEventListener('input', () => {
-      nameInput.dataset.autoFilled = 'false';
+    copiesInput.addEventListener('input', updateCustomizerPreview);
+    copiesInput.addEventListener('change', () => {
+      if (parseInt(copiesInput.value, 10) < 1 || isNaN(parseInt(copiesInput.value, 10))) {
+        copiesInput.value = 1;
+      }
       updateCustomizerPreview();
     });
 
-    fontSelect.addEventListener('change', updateCustomizerPreview);
-    phraseInput.addEventListener('input', updateCustomizerPreview);
-
-    // Carga de imagen local con FileReader para vista previa ilustrativa
+    // Carga de archivo de imagen
     imageInput.addEventListener('change', () => {
       const file = imageInput.files && imageInput.files[0];
       if (!file) return;
@@ -406,9 +391,9 @@
       reader.onload = (ev) => {
         state.customizer.uploadedImageDataUrl = ev.target.result;
         state.customizer.uploadedImageName = file.name;
-        if (imageStatus) imageStatus.textContent = `Archivo cargado: ${file.name}`;
+        if (imageStatus) imageStatus.textContent = `Archivo adjunto: ${file.name}`;
         if (clearImageBtn) clearImageBtn.hidden = false;
-        updateCustomizerPreview();
+        showToast(`Imagen «${file.name}» cargada para enviar en tu cotización.`);
       };
       reader.readAsDataURL(file);
     });
@@ -420,42 +405,54 @@
         state.customizer.uploadedImageName = '';
         if (imageStatus) imageStatus.textContent = 'Ningún archivo seleccionado';
         clearImageBtn.hidden = true;
-        updateCustomizerPreview();
       });
     }
 
-    // Guardar taza personalizada en el carrito local
+    function buildCurrentCustomItem() {
+      const product = getProductById(state.customizer.productId);
+      const isBicolor = product.isColorCustomizable;
+      const color = isBicolor ? getColorById(state.customizer.colorId) : null;
+      const copies = Math.max(1, parseInt(copiesInput.value, 10) || 1);
+      const unitPrice = computeUnitPrice(product);
+      const notes = (notesInput.value || '').trim();
+
+      return {
+        productId: product.id,
+        productName: product.name,
+        image: isBicolor && color ? color.image : product.image,
+        colorId: isBicolor && color ? color.id : 'blanco',
+        colorLabel: isBicolor && color ? color.label : 'Blanca completa',
+        unitPrice,
+        quantity: copies,
+        customization: {
+          uploadedImageName: state.customizer.uploadedImageName || null,
+          notes: notes || null
+        }
+      };
+    }
+
+    // Botón A: Añadir al carrito
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      const product = getProductById(state.customizer.productId);
-      const variant = getVariant(product, state.customizer.variantId);
-      const unitPrice = computePrice(product, state.customizer.variantId);
-      const customName = (nameInput.value || '').trim() || product.defaultCustomText || 'Sin texto';
-      const customPhrase = (phraseInput.value || '').trim();
-      const customNotes = (notesInput.value || '').trim();
-
-      addItemToCart({
-        productId: product.id,
-        name: product.name,
-        image: product.image,
-        variantId: variant.id,
-        variantLabel: variant.label,
-        unitPrice,
-        customization: {
-          name: customName,
-          phrase: customPhrase,
-          fontStyle: fontSelect.value === 'modern' ? 'Geométrica Sans' : 'Editorial Serif',
-          uploadedImageName: state.customizer.uploadedImageName || null,
-          notes: customNotes || null
-        }
-      });
-
+      const item = buildCurrentCustomItem();
+      addItemToCart(item);
       closeCustomizer();
       openCartDrawer();
-      showToast(`«${product.name}» personalizada añadida a tu carrito.`);
+      showToast(`¡Agregado al carrito! (${item.quantity} ${item.quantity === 1 ? 'taza' : 'tazas'}).`);
     });
 
-    // Disparadores globales para abrir el personalizador
+    // Botón B: Preordenar / Enviar directamente por WhatsApp
+    if (directWhatsAppBtn) {
+      directWhatsAppBtn.addEventListener('click', () => {
+        const item = buildCurrentCustomItem();
+        const total = item.unitPrice * item.quantity;
+        const waUrl = buildWhatsAppQuoteUrl([item], total);
+        window.open(waUrl, '_blank', 'noopener,noreferrer');
+        showToast('Abriendo WhatsApp con tu cotización...');
+      });
+    }
+
+    // Disparadores globales
     document.querySelectorAll('[data-open-customizer]').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
@@ -466,7 +463,6 @@
     document.querySelectorAll('[data-customize-product]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const prodId = btn.getAttribute('data-customize-product');
-        nameInput.dataset.autoFilled = 'true';
         openCustomizer(prodId);
       });
     });
@@ -479,7 +475,6 @@
       if (e.target === dialog) closeCustomizer();
     });
 
-    // Exponer función para abrir desde el modal de detalle
     window.__openStampaCustomizer = openCustomizer;
   }
 
@@ -493,36 +488,14 @@
     const imgEl = document.getElementById('detailProductImage');
     const priceEl = document.getElementById('detailProductPrice');
     const descEl = document.getElementById('detailProductDescription');
-    const variantsList = document.getElementById('detailVariantsList');
     const customizeBtn = document.getElementById('detailCustomizeBtn');
     const quickAddBtn = document.getElementById('detailQuickAddBtn');
 
     if (!dialog) return;
 
-    function renderDetailVariants(product) {
-      variantsList.innerHTML = '';
-      product.variants.forEach((v) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        const isActive = v.id === state.detailVariantId;
-        btn.className = `variant-pill${isActive ? ' is-active' : ''}`;
-        btn.innerHTML = `<span class="variant-pill__dot" style="background-color: ${v.colorHex}"></span><span>${escapeHtml(
-          v.label
-        )}</span>`;
-        btn.addEventListener('click', () => {
-          state.detailVariantId = v.id;
-          state.selectedVariantsByCard[product.id] = v.id;
-          priceEl.textContent = formatCurrency(computePrice(product, v.id));
-          renderDetailVariants(product);
-        });
-        variantsList.appendChild(btn);
-      });
-    }
-
     function openDetail(productId) {
       const product = getProductById(productId);
       state.detailProduct = product;
-      state.detailVariantId = state.selectedVariantsByCard[product.id] || product.variants[0].id;
 
       if (colTag) colTag.textContent = product.collectionLabel;
       if (titleEl) titleEl.textContent = product.name;
@@ -530,10 +503,8 @@
         imgEl.src = product.image;
         imgEl.alt = product.imageAlt;
       }
-      if (priceEl) priceEl.textContent = formatCurrency(computePrice(product, state.detailVariantId));
+      if (priceEl) priceEl.textContent = `${formatCurrency(product.price)} + envío`;
       if (descEl) descEl.textContent = product.fullDescription;
-
-      renderDetailVariants(product);
 
       if (typeof dialog.showModal === 'function') {
         dialog.showModal();
@@ -565,25 +536,19 @@
       quickAddBtn.addEventListener('click', () => {
         if (!state.detailProduct) return;
         const product = state.detailProduct;
-        const variant = getVariant(product, state.detailVariantId);
-        const unitPrice = computePrice(product, variant.id);
-
         addItemToCart({
           productId: product.id,
-          name: product.name,
+          productName: product.name,
           image: product.image,
-          variantId: variant.id,
-          variantLabel: variant.label,
-          unitPrice,
+          colorId: product.isColorCustomizable ? 'rosa' : 'blanco',
+          colorLabel: product.isColorCustomizable ? 'Rosa Pastel (base)' : 'Blanca completa',
+          unitPrice: product.price,
+          quantity: 1,
           customization: {
-            name: product.defaultCustomText || 'Diseño de referencia',
-            phrase: '',
-            fontStyle: 'Estándar del modelo',
             uploadedImageName: null,
-            notes: null
+            notes: 'Versión base'
           }
         });
-
         closeDetail();
         openCartDrawer();
         showToast(`«${product.name}» añadida al carrito.`);
@@ -606,7 +571,7 @@
   }
 
   // =========================================================================
-  // 6. Carrito Local Funcional (Prototipo sin pagos simulados)
+  // 6. Carrito Local y Cotización por WhatsApp
   // =========================================================================
   function loadCartFromStorage() {
     try {
@@ -630,18 +595,18 @@
   function addItemToCart(newItem) {
     const signature = JSON.stringify({
       p: newItem.productId,
-      v: newItem.variantId,
-      c: newItem.customization
+      c: newItem.colorId,
+      img: newItem.customization ? newItem.customization.uploadedImageName : null,
+      n: newItem.customization ? newItem.customization.notes : null
     });
 
     const existing = state.cart.find((item) => item.signature === signature);
     if (existing) {
-      existing.quantity += 1;
+      existing.quantity += newItem.quantity;
     } else {
       state.cart.push({
         id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
         signature,
-        quantity: 1,
         ...newItem
       });
     }
@@ -707,19 +672,18 @@
         const c = item.customization || {};
         return `
         <li class="cart-item">
-          <img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name)}" width="72" height="72" class="cart-item__thumb">
+          <img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.productName)}" width="72" height="72" class="cart-item__thumb">
           <div>
-            <h3 class="cart-item__title">${escapeHtml(item.name)}</h3>
+            <h3 class="cart-item__title">${escapeHtml(item.productName)}</h3>
             <div class="cart-item__meta">
-              <span><strong>Acabado:</strong> ${escapeHtml(item.variantLabel)}</span>
-              <span><strong>Texto/Nombre:</strong> ${escapeHtml(c.name || 'Base')} (${escapeHtml(c.fontStyle || 'Estándar')})</span>
-              ${c.phrase ? `<span><strong>Frase:</strong> ${escapeHtml(c.phrase)}</span>` : ''}
-              ${c.uploadedImageName ? `<span><strong>Imagen adjunta:</strong> ${escapeHtml(c.uploadedImageName)}</span>` : ''}
+              <span><strong>Acabado/Color:</strong> ${escapeHtml(item.colorLabel || 'Blanco')}</span>
+              ${c.uploadedImageName ? `<span><strong>Archivo:</strong> ${escapeHtml(c.uploadedImageName)}</span>` : ''}
               ${c.notes ? `<span><strong>Notas:</strong> ${escapeHtml(c.notes)}</span>` : ''}
-              <span><strong>Precio unitario (demo):</strong> ${formatCurrency(item.unitPrice)}</span>
+              <span><strong>Precio unitario:</strong> ${formatCurrency(item.unitPrice)}</span>
+              <span><strong>Subtotal:</strong> ${formatCurrency(item.unitPrice * item.quantity)}</span>
             </div>
             <div class="cart-item__controls">
-              <div class="qty-control" role="group" aria-label="Cantidad de ${escapeHtml(item.name)}">
+              <div class="qty-control" role="group" aria-label="Cantidad">
                 <button type="button" class="qty-control__btn" data-qty-minus="${escapeHtml(item.id)}" aria-label="Disminuir cantidad">−</button>
                 <span class="qty-control__val">${item.quantity}</span>
                 <button type="button" class="qty-control__btn" data-qty-plus="${escapeHtml(item.id)}" aria-label="Aumentar cantidad">+</button>
@@ -767,9 +731,9 @@
   function initCartDrawer() {
     const openBtn = document.getElementById('cartOpenBtn');
     const dialog = document.getElementById('cartDialog');
-    const copyBtn = document.getElementById('copyOrderSummaryBtn');
+    const sendWhatsAppBtn = document.getElementById('sendWhatsAppCartBtn');
+    const addAnotherOrderBtn = document.getElementById('addAnotherOrderBtn');
     const clearBtn = document.getElementById('clearCartBtn');
-    const feedbackEl = document.getElementById('cartActionFeedback');
 
     renderCartUI();
 
@@ -786,11 +750,19 @@
         if (e.target === dialog) closeCartDrawer();
       });
 
-      // Si el usuario pulsa "Personalizar una taza" dentro del carrito vacío, cerramos el carrito primero
       dialog.querySelectorAll('[data-open-customizer]').forEach((btn) => {
         btn.addEventListener('click', () => {
           closeCartDrawer();
         });
+      });
+    }
+
+    if (addAnotherOrderBtn) {
+      addAnotherOrderBtn.addEventListener('click', () => {
+        closeCartDrawer();
+        if (typeof window.__openStampaCustomizer === 'function') {
+          window.__openStampaCustomizer();
+        }
       });
     }
 
@@ -801,44 +773,22 @@
       });
     }
 
-    if (copyBtn) {
-      copyBtn.addEventListener('click', () => {
-        const subtotal = state.cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-        const lines = [
-          'RESUMEN DE SOLICITUD — STAMPADITO (PROTOTIPO DEMO)',
-          '--------------------------------------------------',
-          ...state.cart.map((item, index) => {
-            const c = item.customization || {};
-            return `${index + 1}. ${item.name} (x${item.quantity}) - ${item.variantLabel} | Texto: "${c.name || ''}" ${
-              c.phrase ? `| Frase: "${c.phrase}"` : ''
-            } ${c.uploadedImageName ? `| Archivo: ${c.uploadedImageName}` : ''} | Subtotal: ${formatCurrency(
-              item.unitPrice * item.quantity
-            )}`;
-          }),
-          '--------------------------------------------------',
-          `Total estimado (demo): ${formatCurrency(subtotal)}`,
-          'Nota: Solicitud generada desde el prototipo StampaDito (pendiente de pasarela de pago y envío).'
-        ];
-
-        const summaryText = lines.join('\n');
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(summaryText).then(() => {
-            if (feedbackEl) {
-              feedbackEl.textContent =
-                'Resumen copiado al portapapeles. Listo para compartir cuando se active el canal de pedidos.';
-              feedbackEl.hidden = false;
-            }
-          });
-        } else if (feedbackEl) {
-          feedbackEl.textContent = 'Resumen preparado en el carrito local.';
-          feedbackEl.hidden = false;
+    if (sendWhatsAppBtn) {
+      sendWhatsAppBtn.addEventListener('click', () => {
+        if (state.cart.length === 0) {
+          showToast('Tu carrito está vacío.');
+          return;
         }
+        const subtotal = state.cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+        const waUrl = buildWhatsAppQuoteUrl(state.cart, subtotal);
+        window.open(waUrl, '_blank', 'noopener,noreferrer');
+        showToast('Abriendo WhatsApp con tu pedido...');
       });
     }
   }
 
   // =========================================================================
-  // 7. Animaciones de aparición en Scroll (IntersectionObserver) y Hero sutil
+  // 7. Animaciones de scroll y Hero
   // =========================================================================
   function initScrollAndHeroMotion() {
     if (prefersReducedMotion.matches) return;
@@ -862,7 +812,6 @@
 
       revealElements.forEach((el, idx) => {
         const rect = el.getBoundingClientRect();
-        // Dejar inmediatamente visibles los elementos en el primer pantallazo
         if (rect.top < window.innerHeight * 0.92) {
           el.classList.add('is-visible');
         } else {
@@ -874,7 +823,6 @@
       });
     }
 
-    // Movimiento de profundidad muy leve en el Hero solo en escritorio con puntero fino
     const heroStage = document.getElementById('heroStage');
     const parallaxLayers = document.querySelectorAll('[data-parallax-depth]');
     if (heroStage && parallaxLayers.length > 0 && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
@@ -919,10 +867,19 @@
     initCartDrawer();
     initScrollAndHeroMotion();
 
-    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(() => {});
-      });
+    // Desactivar ServiceWorker en localhost durante desarrollo para que los cambios se vean al instante sin caché
+    if ('serviceWorker' in navigator) {
+      if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const reg of registrations) {
+            reg.unregister();
+          }
+        });
+      } else if (location.protocol === 'https:') {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js').catch(() => {});
+        });
+      }
     }
   }
 
