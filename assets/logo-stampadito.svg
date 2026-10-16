@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 56" fill="none" role="img" aria-label="StampaDito">
+  <!-- Decorative geometric mug emblem -->
+  <g transform="translate(4, 6)">
+    <!-- Handle -->
+    <path d="M36 10H42C46.4183 10 50 13.5817 50 18V24C50 28.4183 46.4183 32 42 32H36" stroke="#202020" stroke-width="4" stroke-linecap="round"/>
+    <!-- Mug body -->
+    <rect x="2" y="4" width="34" height="36" rx="8" fill="#EF91AA" stroke="#202020" stroke-width="3.5"/>
+    <!-- Accent geometric shapes on mug -->
+    <path d="M9 18C9 13.5817 12.5817 10 17 10H21C25.4183 10 29 13.5817 29 18V26H9V18Z" fill="#D4E678" stroke="#202020" stroke-width="2.5"/>
+    <circle cx="19" cy="21" r="3.5" fill="#202020"/>
+    <!-- Sparkle -->
+    <path d="M46 2L47.5 6.5L52 8L47.5 9.5L46 14L44.5 9.5L40 8L44.5 6.5L46 2Z" fill="#B9DDCC" stroke="#202020" stroke-width="1.5"/>
+  </g>
+  <!-- Brand typography -->
+  <text x="66" y="38" fill="#202020" font-family="'Fraunces', 'Syne', Georgia, serif" font-weight="800" font-size="28" letter-spacing="-0.03em">Stampa<tspan fill="#202020" text-decoration="underline" text-decoration-color="#EF91AA" text-decoration-thickness="4px">Dito</tspan></text>
+</svg>

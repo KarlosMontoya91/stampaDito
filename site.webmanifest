@@ -1,0 +1,25 @@
+{
+  "name": "StampaDito | Tazas personalizadas",
+  "short_name": "StampaDito",
+  "description": "Tazas personalizadas mediante sublimación con nombres, fotos e ilustraciones originales.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F7F5EF",
+  "theme_color": "#F7F5EF",
+  "lang": "es-MX",
+  "icons": [
+    {
+      "src": "assets/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/tazas-recortadas/taza-botanica-camila.png",
+      "sizes": "720x720",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
