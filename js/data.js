@@ -66,7 +66,7 @@ window.STAMPADITO_DATA = {
       label: "Blanco Puro",
       colorHex: "#FFFFFF",
       bgStage: "#F6F5F2",
-      image: "assets/originales-derivados/Taza blanca con interior y asa negras.webp"
+      image: "assets/originales-derivados/Taza cerámica blanca sobre fondo transparente.png"
     },
     {
       id: "celeste",
@@ -147,7 +147,7 @@ window.STAMPADITO_DATA = {
         "Nuestra opción icónica y versátil. Fabricada en cerámica blanca de 11 oz con polímero de alta densidad para máxima nitidez y fijación de tintas. Lista para plasmar tus fotos, logotipos, frases o proyectos.",
       price: 150,
       accentTheme: "sky",
-      image: "assets/originales-derivados/Taza blanca con interior y asa negras.webp",
+      image: "assets/originales-derivados/Taza cerámica blanca sobre fondo transparente.png",
       imageAlt: "Taza personalizada de cerámica blanca clásica de 11 oz",
       isColorCustomizable: false,
       defaultColorId: "blanco"

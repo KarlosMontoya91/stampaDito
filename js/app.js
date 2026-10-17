@@ -71,7 +71,7 @@
 
   // Generador de URL de WhatsApp con mensaje estructurado
   function buildWhatsAppQuoteUrl(items, totalEstimated) {
-    const phone = DATA.meta.whatsappPhone || '5215500000000';
+    const phone = DATA.meta.whatsappPhone || '528132765166';
     let text = `¡Hola StampaDito! 👋 Quisiera solicitar la cotización para mi pedido de tazas personalizadas:\n\n`;
 
     items.forEach((item, idx) => {
@@ -114,8 +114,7 @@
         DATA.promoBar.items
           .map(
             (text) =>
-              `<span class="promo-bar__item">${escapeHtml(text)}</span><span class="promo-bar__sep"${
-                isClone ? '' : ' aria-hidden="true"'
+              `<span class="promo-bar__item">${escapeHtml(text)}</span><span class="promo-bar__sep"${isClone ? '' : ' aria-hidden="true"'
               }>✦</span>`
           )
           .join('');
@@ -877,7 +876,7 @@
         });
       } else if (location.protocol === 'https:') {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js').catch(() => {});
+          navigator.serviceWorker.register('./sw.js').catch(() => { });
         });
       }
     }
