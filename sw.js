@@ -8,7 +8,7 @@
  * - Imágenes y recursos gráficos: Stale-While-Revalidate para respuesta instantánea en móvil.
  */
 
-const CACHE_NAME = 'stampadito-prod-v2';
+const CACHE_NAME = 'stampadito-prod-v4';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -21,11 +21,9 @@ const CORE_ASSETS = [
   './assets/tazas-recortadas/taza-botanica-camila.webp',
   './assets/tazas-recortadas/taza-mascota-bruno.webp',
   './assets/tazas-recortadas/taza-nombre-mateo.webp',
-  './assets/tazas-recortadas/taza-geometria-color.webp',
-  './assets/tazas-recortadas/taza-ilustracion-gatito.webp',
   './assets/tazas-recortadas/taza-regalo-polaroid.webp',
   './assets/tazas-recortadas/taza-negocio-estudio.webp',
-  './assets/tazas-recortadas/taza-banner-sol.webp'
+  './assets/originales-derivados/Taza rosa con perrito y ansiedad.webp'
 ];
 
 self.addEventListener('install', (event) => {

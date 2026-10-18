@@ -1,6 +1,6 @@
 /**
- * StampaDito — Lógica de interacción del sitio (js/app.js)
- * ---------------------------------------------------------
+ * StampaDito — Lógica de interacción del sitio
+ * --------------------------------------------
  */
 
 (function () {
@@ -9,22 +9,31 @@
   const DATA = window.STAMPADITO_DATA;
   if (!DATA) return;
 
-  const STORAGE_KEY = 'stampadito_cart_v2';
+  const STORAGE_KEY = 'stampadito_cart_v3';
+  const PAGE_SIZE = 6;
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  const baseModels = DATA.baseModels || DATA.products || [];
+  const catalogDesigns = DATA.catalogDesigns || [];
+  const cupColors = DATA.cupColors || [];
 
   // Estado de la aplicación
   const state = {
     activeFilter: 'all',
-    selectedVariantsByCard: {},
+    currentPage: 1,
     customizer: {
-      productId: DATA.products[0].id,
-      colorId: DATA.cupColors[0].id,
+      baseModelId: baseModels[0] ? baseModels[0].id : 'taza-blanca-clasica',
+      colorId: 'blanco',
+      originDesignId: null,
       copies: 1,
-      uploadedImageDataUrl: null,
       uploadedImageName: '',
       notes: ''
     },
-    detailProduct: null,
+    detail: {
+      designId: null,
+      colorId: null,
+      quantity: 1
+    },
     cart: loadCartFromStorage()
   };
 
@@ -36,16 +45,25 @@
     return `${symbol}${Number(amount).toFixed(0)} ${suffix}`;
   }
 
-  function getProductById(productId) {
-    return DATA.products.find((p) => p.id === productId) || DATA.products[0];
+  function getBaseModelById(modelId) {
+    return baseModels.find((m) => m.id === modelId) || baseModels[0];
+  }
+
+  function getDesignById(designId) {
+    if (!designId) return null;
+    return catalogDesigns.find((d) => d.id === designId) || null;
   }
 
   function getColorById(colorId) {
-    return DATA.cupColors.find((c) => c.id === colorId) || DATA.cupColors[0];
+    return cupColors.find((c) => c.id === colorId) || cupColors[0];
   }
 
-  function computeUnitPrice(product) {
-    return product ? product.price : 150;
+  function getBicolorOptions() {
+    return cupColors.filter((c) => c.id !== 'blanco');
+  }
+
+  function computeUnitPrice(baseModel) {
+    return baseModel ? baseModel.price : 150;
   }
 
   function showToast(message) {
@@ -72,26 +90,39 @@
   // Generador de URL de WhatsApp con mensaje estructurado
   function buildWhatsAppQuoteUrl(items, totalEstimated) {
     const phone = DATA.meta.whatsappPhone || '528132765166';
-    let text = `¡Hola StampaDito! 👋 Quisiera solicitar la cotización para mi pedido de tazas personalizadas:\n\n`;
+    const hasUploadedFiles = items.some((i) => i.customization && i.customization.uploadedImageName);
+
+    let text = `¡Hola StampaDito! 👋 Quiero cotizar el siguiente pedido de tazas:\n\n`;
 
     items.forEach((item, idx) => {
-      text += `☕ *Item ${idx + 1}:* ${item.productName}\n`;
-      text += `   • Cantidad: *${item.quantity} ${item.quantity === 1 ? 'taza' : 'tazas'}*\n`;
-      if (item.colorLabel) {
-        text += `   • Color interior y asa: *${item.colorLabel}*\n`;
+      text += `☕ *${idx + 1}. ${item.designName || item.productName}*\n`;
+      if (item.orderAs) {
+        text += `   • Pídela como: «${item.orderAs}» (ID: ${item.designId})\n`;
+      } else {
+        text += `   • Modalidad: Personalización con mi idea\n`;
       }
+      text += `   • Modelo físico: ${item.modelName || item.productName}\n`;
+      if (item.colorLabel) {
+        text += `   • Color de interior y asa: ${item.colorLabel}\n`;
+      }
+      if (item.presentation) {
+        text += `   • Presentación: ${item.presentation}\n`;
+      }
+      text += `   • Cantidad: ${item.quantity} ${item.quantity === 1 ? 'taza' : 'tazas'}\n`;
       if (item.customization && item.customization.uploadedImageName) {
-        text += `   • Imagen adjunta: *${item.customization.uploadedImageName}* (te la comparto por aquí)\n`;
+        text += `   • Archivo seleccionado: ${item.customization.uploadedImageName} (lo adjunto en este chat)\n`;
       }
       if (item.customization && item.customization.notes) {
-        text += `   • Idea / Notas: "${item.customization.notes}"\n`;
+        text += `   • Detalles / Idea: "${item.customization.notes}"\n`;
       }
       text += `   • Subtotal estimado: ${formatCurrency(item.unitPrice * item.quantity)}\n\n`;
     });
 
-    text += `💰 *Total estimado de tazas:* ${formatCurrency(totalEstimated)} MXN\n`;
-    text += `📍 *Envío:* Por favor indíquenme el costo de envío a mi código postal o ciudad.\n\n`;
-    text += `¡Quedo atento(a) para enviarles la imagen y confirmar mi pedido!`;
+    text += `💰 *Subtotal estimado de tazas:* ${formatCurrency(totalEstimated)}\n`;
+    text += `📍 *Envío:* Les comparto mi código postal para cotizar el envío y confirmar disponibilidad y total.\n`;
+    if (hasUploadedFiles) {
+      text += `📎 *Nota:* Enseguida adjunto mi imagen en este chat para que puedan revisarla.`;
+    }
 
     return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
   }
@@ -114,7 +145,8 @@
         DATA.promoBar.items
           .map(
             (text) =>
-              `<span class="promo-bar__item">${escapeHtml(text)}</span><span class="promo-bar__sep"${isClone ? '' : ' aria-hidden="true"'
+              `<span class="promo-bar__item">${escapeHtml(text)}</span><span class="promo-bar__sep"${
+                isClone ? '' : ' aria-hidden="true"'
               }>✦</span>`
           )
           .join('');
@@ -176,26 +208,237 @@
   }
 
   // =========================================================================
-  // 3. Catálogo e Interacciones
+  // 3. Catálogo Unificado, Filtros, Contadores y Paginación
   // =========================================================================
+  function getFilteredDesigns(filterId) {
+    if (!filterId || filterId === 'all') {
+      return catalogDesigns;
+    }
+    return catalogDesigns.filter((d) => Array.isArray(d.categories) && d.categories.includes(filterId));
+  }
+
+  function updateCategoryCounts() {
+    const filterButtons = document.querySelectorAll('[data-filter]');
+    filterButtons.forEach((btn) => {
+      const filterId = btn.getAttribute('data-filter') || 'all';
+      const count = getFilteredDesigns(filterId).length;
+      const badge = btn.querySelector('.filter-chip__count');
+      if (badge) {
+        badge.textContent = String(count);
+      }
+    });
+  }
+
+  function renderCatalogGrid() {
+    const grid = document.getElementById('productGrid');
+    const emptyState = document.getElementById('catalogEmptyState');
+    const pagination = document.getElementById('catalogPagination');
+    if (!grid) return;
+
+    const filtered = getFilteredDesigns(state.activeFilter);
+    const totalItems = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+
+    if (state.currentPage > totalPages) {
+      state.currentPage = totalPages;
+    }
+    if (state.currentPage < 1) {
+      state.currentPage = 1;
+    }
+
+    if (totalItems === 0) {
+      grid.innerHTML = '';
+      grid.hidden = true;
+      if (emptyState) emptyState.hidden = false;
+      if (pagination) {
+        pagination.innerHTML = '';
+        pagination.hidden = true;
+      }
+      return;
+    }
+
+    if (emptyState) emptyState.hidden = true;
+    grid.hidden = false;
+
+    const startIdx = (state.currentPage - 1) * PAGE_SIZE;
+    const pageItems = filtered.slice(startIdx, startIdx + PAGE_SIZE);
+
+    grid.innerHTML = pageItems
+      .map((design) => {
+        const baseModel = getBaseModelById(design.baseModelId);
+        const defaultColor = getColorById(design.defaultColorId);
+        const modelInfoText = baseModel.isColorCustomizable
+          ? `${baseModel.shortLabel} · Interior ${defaultColor.label}`
+          : baseModel.shortLabel;
+
+        return `
+        <article class="product-card product-card--${escapeHtml(design.accentTheme || 'sky')}" data-design-id="${escapeHtml(design.id)}">
+          <div class="product-card__stage${design.isPhotoCrop ? ' product-card__stage--photo' : ''}">
+            <div class="product-card__bg" aria-hidden="true"></div>
+            <span class="product-card__category">${escapeHtml(design.categoryLabel)}</span>
+            <div class="product-card__img-wrap">
+              <img src="${escapeHtml(design.image)}"
+                alt="${escapeHtml(design.imageAlt)}" width="720" height="720" loading="lazy"
+                decoding="async" class="product-card__img${design.isPhotoCrop ? ' product-card__img--photo' : ''}">
+            </div>
+          </div>
+          <div class="product-card__body">
+            <div class="product-card__header">
+              <h3 class="product-card__title">
+                <button type="button" class="product-card__title-btn" data-view-design="${escapeHtml(design.id)}">
+                  ${escapeHtml(design.name)}
+                </button>
+              </h3>
+              <p class="product-card__price">
+                $${design.price} <span class="product-card__currency">MXN</span>
+                <small class="product-card__price-note">+ envío</small>
+              </p>
+            </div>
+            <p class="product-card__order-as">Pídela como «<strong>${escapeHtml(design.orderAs)}</strong>»</p>
+            <p class="product-card__desc">${escapeHtml(design.shortDescription)}</p>
+            <div class="product-card__variants">
+              <span class="product-card__variant-label">Modelo base: <strong>${escapeHtml(modelInfoText)}</strong></span>
+            </div>
+            <div class="product-card__actions">
+              <button type="button" class="btn btn--primary btn--sm" data-customize-design="${escapeHtml(design.id)}">
+                Personalizar y cotizar
+              </button>
+              <button type="button" class="btn btn--outline btn--sm" data-view-design="${escapeHtml(design.id)}">
+                Ver detalles
+              </button>
+            </div>
+          </div>
+        </article>
+      `;
+      })
+      .join('');
+
+    // Enlazar eventos de las tarjetas recién creadas
+    grid.querySelectorAll('[data-customize-design]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const designId = btn.getAttribute('data-customize-design');
+        if (typeof window.__openStampaCustomizerWithDesign === 'function') {
+          window.__openStampaCustomizerWithDesign(designId);
+        }
+      });
+    });
+
+    grid.querySelectorAll('[data-view-design]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const designId = btn.getAttribute('data-view-design');
+        if (typeof window.__openStampaDetail === 'function') {
+          window.__openStampaDetail(designId);
+        }
+      });
+    });
+
+    renderPaginationControls(totalItems, totalPages);
+  }
+
+  function renderPaginationControls(totalItems, totalPages) {
+    const pagination = document.getElementById('catalogPagination');
+    if (!pagination) return;
+
+    if (totalPages <= 1) {
+      pagination.innerHTML = '';
+      pagination.hidden = true;
+      return;
+    }
+
+    pagination.hidden = false;
+    const startItem = (state.currentPage - 1) * PAGE_SIZE + 1;
+    const endItem = Math.min(totalItems, state.currentPage * PAGE_SIZE);
+
+    let pagesHtml = '';
+    for (let p = 1; p <= totalPages; p++) {
+      const isCurrent = p === state.currentPage;
+      pagesHtml += `
+        <button type="button" class="pagination-btn${isCurrent ? ' is-active' : ''}" data-page="${p}" ${
+          isCurrent ? 'aria-current="page"' : ''
+        } aria-label="Ir a la página ${p}">
+          ${p}
+        </button>
+      `;
+    }
+
+    pagination.innerHTML = `
+      <div class="catalog-pagination__status" aria-live="polite">
+        Mostrando <strong>${startItem}–${endItem}</strong> de <strong>${totalItems}</strong> diseños
+      </div>
+      <div class="catalog-pagination__controls">
+        <button type="button" class="pagination-btn pagination-btn--nav" data-page-prev ${
+          state.currentPage <= 1 ? 'disabled' : ''
+        } aria-label="Página anterior">
+          ← Anterior
+        </button>
+        <div class="catalog-pagination__pages">
+          ${pagesHtml}
+        </div>
+        <button type="button" class="pagination-btn pagination-btn--nav" data-page-next ${
+          state.currentPage >= totalPages ? 'disabled' : ''
+        } aria-label="Página siguiente">
+          Siguiente →
+        </button>
+      </div>
+    `;
+
+    const scrollCatalogIntoView = () => {
+      const catalogSection = document.getElementById('catalogo');
+      if (catalogSection) {
+        catalogSection.scrollIntoView({ behavior: prefersReducedMotion.matches ? 'auto' : 'smooth', block: 'start' });
+      }
+    };
+
+    const prevBtn = pagination.querySelector('[data-page-prev]');
+    if (prevBtn) {
+      prevBtn.addEventListener('click', () => {
+        if (state.currentPage > 1) {
+          state.currentPage -= 1;
+          renderCatalogGrid();
+          scrollCatalogIntoView();
+        }
+      });
+    }
+
+    const nextBtn = pagination.querySelector('[data-page-next]');
+    if (nextBtn) {
+      nextBtn.addEventListener('click', () => {
+        if (state.currentPage < totalPages) {
+          state.currentPage += 1;
+          renderCatalogGrid();
+          scrollCatalogIntoView();
+        }
+      });
+    }
+
+    pagination.querySelectorAll('[data-page]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const targetPage = parseInt(btn.getAttribute('data-page'), 10);
+        if (targetPage && targetPage !== state.currentPage) {
+          state.currentPage = targetPage;
+          renderCatalogGrid();
+          scrollCatalogIntoView();
+        }
+      });
+    });
+  }
+
   function initCatalogInteractions() {
     const filterButtons = document.querySelectorAll('[data-filter]');
-    const productCards = document.querySelectorAll('.product-card[data-product-id]');
+
+    updateCategoryCounts();
 
     function applyCollectionFilter(collectionId, shouldScroll = false) {
-      state.activeFilter = collectionId;
+      state.activeFilter = collectionId || 'all';
+      state.currentPage = 1; // Al cambiar de categoría, vuelve a la primera página
 
       filterButtons.forEach((btn) => {
-        const isMatch = btn.getAttribute('data-filter') === collectionId;
+        const isMatch = btn.getAttribute('data-filter') === state.activeFilter;
         btn.classList.toggle('is-active', isMatch);
         btn.setAttribute('aria-pressed', String(isMatch));
       });
 
-      productCards.forEach((card) => {
-        const cardCollection = card.getAttribute('data-collection');
-        const visible = collectionId === 'all' || cardCollection === collectionId;
-        card.hidden = !visible;
-      });
+      renderCatalogGrid();
 
       if (shouldScroll) {
         const catalogSection = document.getElementById('catalogo');
@@ -221,15 +464,18 @@
         }
       });
     });
+
+    renderCatalogGrid();
   }
 
   // =========================================================================
-  // 4. Modal Personalizador Interactivo (Ajustado a requerimientos)
+  // 4. Modal Personalizador y Solicitud de Cotización
   // =========================================================================
   function initCustomizerModal() {
     const dialog = document.getElementById('customizerDialog');
     const form = document.getElementById('customizerForm');
     const productSelect = document.getElementById('customProductSelect');
+    const colorGroup = document.getElementById('customColorGroup');
     const variantsContainer = document.getElementById('customizerVariantsContainer');
     const variantHelp = document.getElementById('customVariantHelp');
     const copiesInput = document.getElementById('customCopiesInput');
@@ -238,88 +484,105 @@
     const clearImageBtn = document.getElementById('clearCustomImageBtn');
     const notesInput = document.getElementById('customNotesInput');
     const priceDisplay = document.getElementById('customizerPriceDisplay');
-    const submitBtn = document.getElementById('customizerSubmitBtn');
     const directWhatsAppBtn = document.getElementById('customizerDirectWhatsAppBtn');
 
-    // Elementos de vista previa
+    // Elementos de referencia física y diseño de origen
     const stage = document.getElementById('customizerStage');
     const previewModelName = document.getElementById('customizerPreviewModelName');
     const baseImage = document.getElementById('customizerBaseImage');
+    const originBox = document.getElementById('customizerOriginBox');
+    const originThumb = document.getElementById('customizerOriginThumb');
+    const originTitle = document.getElementById('customizerOriginTitle');
+    const originOrderAs = document.getElementById('customizerOriginOrderAs');
+    const clearOriginBtn = document.getElementById('clearOriginDesignBtn');
 
     if (!dialog || !form || !productSelect) return;
 
     // Poblar selector de tipos de taza
-    productSelect.innerHTML = DATA.products
-      .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} — $${p.price} MXN</option>`)
+    productSelect.innerHTML = baseModels
+      .map((m) => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)} — $${m.price} MXN</option>`)
       .join('');
 
+    function renderOriginBanner() {
+      const originDesign = getDesignById(state.customizer.originDesignId);
+      if (!originBox) return;
+
+      if (!originDesign) {
+        originBox.hidden = true;
+        return;
+      }
+
+      originBox.hidden = false;
+      if (originThumb) {
+        originThumb.src = originDesign.image;
+        originThumb.alt = originDesign.name;
+      }
+      if (originTitle) {
+        originTitle.textContent = originDesign.name;
+      }
+      if (originOrderAs) {
+        originOrderAs.textContent = `Pídela como «${originDesign.orderAs}»`;
+      }
+    }
+
     function renderColorPills() {
-      const product = getProductById(state.customizer.productId);
-      const isBicolor = product.isColorCustomizable;
+      const baseModel = getBaseModelById(state.customizer.baseModelId);
+      const isBicolor = baseModel.isColorCustomizable;
 
       variantsContainer.innerHTML = '';
 
       if (!isBicolor) {
-        if (variantHelp) {
-          variantHelp.textContent = 'Este modelo es 100% blanco por dentro y por fuera. Opción de color bloqueada.';
-          variantHelp.style.color = '#B25E00';
-        }
-      } else {
-        if (variantHelp) {
-          variantHelp.textContent = 'Selecciona el color para el fondo interior y el asa (10 colores disponibles):';
-          variantHelp.style.color = '';
-        }
+        if (colorGroup) colorGroup.hidden = true;
+        return;
       }
 
-      DATA.cupColors.forEach((c) => {
+      if (colorGroup) colorGroup.hidden = false;
+      if (variantHelp) {
+        variantHelp.textContent = 'Elige el color para el interior y el asa de tu taza bicolor:';
+      }
+
+      cupColors.forEach((c) => {
         const btn = document.createElement('button');
         btn.type = 'button';
-        const isActive = isBicolor ? c.id === state.customizer.colorId : c.id === 'blanco';
-        btn.className = `variant-pill${isActive ? ' is-active' : ''}${!isBicolor ? ' is-disabled' : ''}`;
+        const isActive = c.id === state.customizer.colorId;
+        btn.className = `variant-pill${isActive ? ' is-active' : ''}`;
         btn.setAttribute('role', 'radio');
         btn.setAttribute('aria-checked', String(isActive));
-        if (!isBicolor) {
-          btn.setAttribute('aria-disabled', 'true');
-          btn.tabIndex = -1;
-        }
 
         btn.innerHTML = `<span class="variant-pill__dot" style="background-color: ${c.colorHex}"></span><span>${escapeHtml(
           c.label
         )}</span>`;
 
-        if (isBicolor) {
-          btn.addEventListener('click', () => {
-            state.customizer.colorId = c.id;
-            renderColorPills();
-            updateCustomizerPreview();
-          });
-        }
+        btn.addEventListener('click', () => {
+          state.customizer.colorId = c.id;
+          renderColorPills();
+          updateCustomizerReference();
+        });
 
         variantsContainer.appendChild(btn);
       });
     }
 
-    function updateCustomizerPreview() {
-      const product = getProductById(state.customizer.productId);
+    function updateCustomizerReference() {
+      const baseModel = getBaseModelById(state.customizer.baseModelId);
       const color = getColorById(state.customizer.colorId);
-      const isBicolor = product.isColorCustomizable;
+      const isBicolor = baseModel.isColorCustomizable;
       const copies = Math.max(1, parseInt(copiesInput.value, 10) || 1);
-      const unitPrice = computeUnitPrice(product);
+      const unitPrice = computeUnitPrice(baseModel);
       const subtotal = unitPrice * copies;
 
       if (previewModelName) {
-        previewModelName.textContent = isBicolor ? `${product.name} (${color.label})` : product.name;
+        previewModelName.textContent = isBicolor ? `${baseModel.shortLabel} · ${color.label}` : baseModel.name;
       }
 
-      // Actualizar imagen y fondo con contraste suave adaptativo
       if (baseImage) {
         if (!isBicolor) {
-          baseImage.src = product.image;
-          baseImage.alt = product.imageAlt;
+          baseImage.src = baseModel.image;
+          baseImage.alt = baseModel.imageAlt;
           if (stage) stage.style.backgroundColor = '#F5F4EE';
         } else {
           baseImage.src = color.image;
-          baseImage.alt = `Taza bicolor con asa e interior color ${color.label}`;
+          baseImage.alt = `Referencia de taza bicolor con interior y asa color ${color.label}`;
           if (stage) stage.style.backgroundColor = color.bgStage;
         }
       }
@@ -329,16 +592,33 @@
       }
     }
 
-    function openCustomizer(productId) {
-      const targetId = productId && DATA.products.some((p) => p.id === productId) ? productId : DATA.products[0].id;
-      state.customizer.productId = targetId;
-      productSelect.value = targetId;
+    function openCustomizer({ designId = null, baseModelId = null, colorId = null } = {}) {
+      const design = getDesignById(designId);
 
-      const product = getProductById(targetId);
-      state.customizer.colorId = product.isColorCustomizable ? (state.customizer.colorId || 'rosa') : 'blanco';
+      if (design) {
+        state.customizer.originDesignId = design.id;
+        state.customizer.baseModelId = baseModelId || design.baseModelId;
+        const model = getBaseModelById(state.customizer.baseModelId);
+        state.customizer.colorId = model.isColorCustomizable
+          ? colorId || design.defaultColorId || 'rosa'
+          : 'blanco';
+      } else {
+        state.customizer.originDesignId = null;
+        if (baseModelId && baseModels.some((m) => m.id === baseModelId)) {
+          state.customizer.baseModelId = baseModelId;
+        }
+        const model = getBaseModelById(state.customizer.baseModelId);
+        if (!model.isColorCustomizable) {
+          state.customizer.colorId = 'blanco';
+        } else if (!state.customizer.colorId || state.customizer.colorId === 'blanco') {
+          state.customizer.colorId = 'rosa';
+        }
+      }
 
+      productSelect.value = state.customizer.baseModelId;
+      renderOriginBanner();
       renderColorPills();
-      updateCustomizerPreview();
+      updateCustomizerReference();
 
       if (typeof dialog.showModal === 'function') {
         dialog.showModal();
@@ -355,52 +635,56 @@
       }
     }
 
+    if (clearOriginBtn) {
+      clearOriginBtn.addEventListener('click', () => {
+        state.customizer.originDesignId = null;
+        renderOriginBanner();
+      });
+    }
+
     productSelect.addEventListener('change', () => {
-      const product = getProductById(productSelect.value);
-      state.customizer.productId = product.id;
-      if (!product.isColorCustomizable) {
+      const model = getBaseModelById(productSelect.value);
+      state.customizer.baseModelId = model.id;
+      if (!model.isColorCustomizable) {
         state.customizer.colorId = 'blanco';
       } else if (state.customizer.colorId === 'blanco') {
-        state.customizer.colorId = 'rosa';
+        const originDesign = getDesignById(state.customizer.originDesignId);
+        state.customizer.colorId =
+          originDesign && originDesign.defaultColorId !== 'blanco' ? originDesign.defaultColorId : 'rosa';
       }
       renderColorPills();
-      updateCustomizerPreview();
+      updateCustomizerReference();
     });
 
-    copiesInput.addEventListener('input', updateCustomizerPreview);
+    copiesInput.addEventListener('input', updateCustomizerReference);
     copiesInput.addEventListener('change', () => {
       if (parseInt(copiesInput.value, 10) < 1 || isNaN(parseInt(copiesInput.value, 10))) {
         copiesInput.value = 1;
       }
-      updateCustomizerPreview();
+      updateCustomizerReference();
     });
 
-    // Carga de archivo de imagen
+    // Selección de archivo local
     imageInput.addEventListener('change', () => {
       const file = imageInput.files && imageInput.files[0];
       if (!file) return;
 
-      if (!file.type.startsWith('image/')) {
-        showToast('Por favor selecciona un archivo de imagen válido (PNG, JPG o WebP).');
+      const validTypes = ['image/png', 'image/jpeg', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        showToast('Selecciona una imagen en formato JPG, PNG o WebP.');
         imageInput.value = '';
         return;
       }
 
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        state.customizer.uploadedImageDataUrl = ev.target.result;
-        state.customizer.uploadedImageName = file.name;
-        if (imageStatus) imageStatus.textContent = `Archivo adjunto: ${file.name}`;
-        if (clearImageBtn) clearImageBtn.hidden = false;
-        showToast(`Imagen «${file.name}» cargada para enviar en tu cotización.`);
-      };
-      reader.readAsDataURL(file);
+      state.customizer.uploadedImageName = file.name;
+      if (imageStatus) imageStatus.textContent = `Archivo seleccionado: ${file.name}`;
+      if (clearImageBtn) clearImageBtn.hidden = false;
+      showToast(`Archivo «${file.name}» registrado. Recuerda adjuntarlo al abrir WhatsApp.`);
     });
 
     if (clearImageBtn) {
       clearImageBtn.addEventListener('click', () => {
         imageInput.value = '';
-        state.customizer.uploadedImageDataUrl = null;
         state.customizer.uploadedImageName = '';
         if (imageStatus) imageStatus.textContent = 'Ningún archivo seleccionado';
         clearImageBtn.hidden = true;
@@ -408,19 +692,25 @@
     }
 
     function buildCurrentCustomItem() {
-      const product = getProductById(state.customizer.productId);
-      const isBicolor = product.isColorCustomizable;
-      const color = isBicolor ? getColorById(state.customizer.colorId) : null;
+      const baseModel = getBaseModelById(state.customizer.baseModelId);
+      const isBicolor = baseModel.isColorCustomizable;
+      const color = isBicolor ? getColorById(state.customizer.colorId) : getColorById('blanco');
+      const originDesign = getDesignById(state.customizer.originDesignId);
       const copies = Math.max(1, parseInt(copiesInput.value, 10) || 1);
-      const unitPrice = computeUnitPrice(product);
+      const unitPrice = computeUnitPrice(baseModel);
       const notes = (notesInput.value || '').trim();
 
       return {
-        productId: product.id,
-        productName: product.name,
-        image: isBicolor && color ? color.image : product.image,
-        colorId: isBicolor && color ? color.id : 'blanco',
-        colorLabel: isBicolor && color ? color.label : 'Blanca completa',
+        designId: originDesign ? originDesign.id : 'personalizada',
+        designName: originDesign ? originDesign.name : 'Taza personalizada con tu idea',
+        orderAs: originDesign ? originDesign.orderAs : null,
+        productId: baseModel.id,
+        productName: originDesign ? `${originDesign.name} (${baseModel.shortLabel})` : baseModel.name,
+        modelName: baseModel.name,
+        presentation: originDesign ? originDesign.presentation : 'Taza individual (11 oz)',
+        image: originDesign ? originDesign.image : isBicolor ? color.image : baseModel.image,
+        colorId: isBicolor ? color.id : 'blanco',
+        colorLabel: isBicolor ? color.label : 'Blanca completa',
         unitPrice,
         quantity: copies,
         customization: {
@@ -437,32 +727,33 @@
       addItemToCart(item);
       closeCustomizer();
       openCartDrawer();
-      showToast(`¡Agregado al carrito! (${item.quantity} ${item.quantity === 1 ? 'taza' : 'tazas'}).`);
+      showToast(`Agregado al carrito: ${item.designName} (${item.quantity} ${item.quantity === 1 ? 'taza' : 'tazas'}).`);
     });
 
-    // Botón B: Preordenar / Enviar directamente por WhatsApp
+    // Botón B: Cotizar directamente por WhatsApp
     if (directWhatsAppBtn) {
       directWhatsAppBtn.addEventListener('click', () => {
         const item = buildCurrentCustomItem();
         const total = item.unitPrice * item.quantity;
         const waUrl = buildWhatsAppQuoteUrl([item], total);
         window.open(waUrl, '_blank', 'noopener,noreferrer');
-        showToast('Abriendo WhatsApp con tu cotización...');
+        showToast('Abriendo WhatsApp con los datos de tu solicitud...');
       });
     }
 
-    // Disparadores globales
+    // Disparadores globales para abrir personalizador sin diseño específico
     document.querySelectorAll('[data-open-customizer]').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
-        openCustomizer(state.customizer.productId);
+        openCustomizer({ designId: null });
       });
     });
 
-    document.querySelectorAll('[data-customize-product]').forEach((btn) => {
+    // Disparadores desde el Hero u otras secciones con diseño específico
+    document.querySelectorAll('[data-customize-design]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const prodId = btn.getAttribute('data-customize-product');
-        openCustomizer(prodId);
+        const designId = btn.getAttribute('data-customize-design');
+        openCustomizer({ designId });
       });
     });
 
@@ -474,36 +765,115 @@
       if (e.target === dialog) closeCustomizer();
     });
 
-    window.__openStampaCustomizer = openCustomizer;
+    window.__openStampaCustomizer = () => openCustomizer({ designId: null });
+    window.__openStampaCustomizerWithDesign = (designId, opts = {}) =>
+      openCustomizer({ designId, ...opts });
   }
 
   // =========================================================================
-  // 5. Modal de Detalle de Producto
+  // 5. Modal de Detalles y Pedido del Diseño
   // =========================================================================
   function initDetailModal() {
     const dialog = document.getElementById('productDetailDialog');
     const colTag = document.getElementById('detailCollectionTag');
     const titleEl = document.getElementById('detailModalTitle');
+    const orderAsEl = document.getElementById('detailOrderAs');
     const imgEl = document.getElementById('detailProductImage');
+    const visualStage = document.getElementById('detailVisualStage');
     const priceEl = document.getElementById('detailProductPrice');
     const descEl = document.getElementById('detailProductDescription');
+    const specModel = document.getElementById('detailSpecModel');
+    const specCapacity = document.getElementById('detailSpecCapacity');
+    const specPresentation = document.getElementById('detailSpecPresentation');
+    const colorGroup = document.getElementById('detailColorGroup');
+    const variantsContainer = document.getElementById('detailVariantsContainer');
+    const variantError = document.getElementById('detailVariantError');
+    const qtyInput = document.getElementById('detailQtyInput');
+    const subtotalHint = document.getElementById('detailSubtotalHint');
     const customizeBtn = document.getElementById('detailCustomizeBtn');
     const quickAddBtn = document.getElementById('detailQuickAddBtn');
 
     if (!dialog) return;
 
-    function openDetail(productId) {
-      const product = getProductById(productId);
-      state.detailProduct = product;
+    function renderDetailVariants(design, baseModel) {
+      if (!colorGroup || !variantsContainer) return;
 
-      if (colTag) colTag.textContent = product.collectionLabel;
-      if (titleEl) titleEl.textContent = product.name;
-      if (imgEl) {
-        imgEl.src = product.image;
-        imgEl.alt = product.imageAlt;
+      variantsContainer.innerHTML = '';
+      if (variantError) variantError.hidden = true;
+
+      // Para una taza blanca, no ofrezcas cambiar el interior como si fuera una opción del mismo modelo
+      if (!baseModel.isColorCustomizable) {
+        colorGroup.hidden = true;
+        state.detail.colorId = 'blanco';
+        return;
       }
-      if (priceEl) priceEl.textContent = `${formatCurrency(product.price)} + envío`;
-      if (descEl) descEl.textContent = product.fullDescription;
+
+      colorGroup.hidden = false;
+      const bicolorOptions = getBicolorOptions();
+
+      bicolorOptions.forEach((c) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        const isActive = c.id === state.detail.colorId;
+        btn.className = `variant-pill${isActive ? ' is-active' : ''}`;
+        btn.setAttribute('role', 'radio');
+        btn.setAttribute('aria-checked', String(isActive));
+
+        btn.innerHTML = `<span class="variant-pill__dot" style="background-color: ${c.colorHex}"></span><span>${escapeHtml(
+          c.label
+        )}</span>`;
+
+        btn.addEventListener('click', () => {
+          state.detail.colorId = c.id;
+          if (variantError) variantError.hidden = true;
+          renderDetailVariants(design, baseModel);
+        });
+
+        variantsContainer.appendChild(btn);
+      });
+    }
+
+    function updateDetailSubtotal() {
+      const design = getDesignById(state.detail.designId);
+      if (!design) return;
+      const qty = Math.max(1, parseInt(qtyInput ? qtyInput.value : 1, 10) || 1);
+      state.detail.quantity = qty;
+      if (subtotalHint) {
+        subtotalHint.textContent = `Subtotal estimado: ${formatCurrency(design.price * qty)}`;
+      }
+    }
+
+    function openDetail(designId) {
+      const design = getDesignById(designId) || catalogDesigns[0];
+      if (!design) return;
+
+      const baseModel = getBaseModelById(design.baseModelId);
+      state.detail.designId = design.id;
+      state.detail.colorId = baseModel.isColorCustomizable ? design.defaultColorId || 'rosa' : 'blanco';
+      state.detail.quantity = 1;
+      if (qtyInput) qtyInput.value = '1';
+
+      if (colTag) colTag.textContent = design.categoryLabel;
+      if (titleEl) titleEl.textContent = design.name;
+      if (orderAsEl) orderAsEl.textContent = `Pídela como «${design.orderAs}»`;
+      if (imgEl) {
+        imgEl.src = design.image;
+        imgEl.alt = design.imageAlt;
+        imgEl.classList.toggle('detail-modal__img--photo', Boolean(design.isPhotoCrop));
+      }
+      if (visualStage) {
+        visualStage.classList.toggle('detail-modal__visual--photo', Boolean(design.isPhotoCrop));
+      }
+      if (priceEl) {
+        priceEl.innerHTML = `$${design.price} MXN <small style="font-size: 0.55em; font-weight: 600;">+ envío</small>`;
+      }
+      if (descEl) descEl.textContent = design.fullDescription;
+      if (specModel) specModel.textContent = baseModel.name;
+      if (specCapacity) specCapacity.textContent = baseModel.capacity;
+      if (specPresentation) specPresentation.textContent = design.presentation || 'Taza individual (11 oz)';
+
+      renderDetailVariants(design, baseModel);
+      updateDetailSubtotal();
 
       if (typeof dialog.showModal === 'function') {
         dialog.showModal();
@@ -520,45 +890,71 @@
       }
     }
 
+    if (qtyInput) {
+      qtyInput.addEventListener('input', updateDetailSubtotal);
+      qtyInput.addEventListener('change', () => {
+        if (parseInt(qtyInput.value, 10) < 1 || isNaN(parseInt(qtyInput.value, 10))) {
+          qtyInput.value = '1';
+        }
+        updateDetailSubtotal();
+      });
+    }
+
     if (customizeBtn) {
       customizeBtn.addEventListener('click', () => {
-        if (!state.detailProduct) return;
-        const pid = state.detailProduct.id;
+        const design = getDesignById(state.detail.designId);
+        if (!design) return;
+        const selectedColor = state.detail.colorId;
         closeDetail();
-        if (typeof window.__openStampaCustomizer === 'function') {
-          window.__openStampaCustomizer(pid);
+        if (typeof window.__openStampaCustomizerWithDesign === 'function') {
+          window.__openStampaCustomizerWithDesign(design.id, {
+            baseModelId: design.baseModelId,
+            colorId: selectedColor
+          });
         }
       });
     }
 
     if (quickAddBtn) {
       quickAddBtn.addEventListener('click', () => {
-        if (!state.detailProduct) return;
-        const product = state.detailProduct;
+        const design = getDesignById(state.detail.designId);
+        if (!design) return;
+        const baseModel = getBaseModelById(design.baseModelId);
+
+        if (baseModel.isColorCustomizable && !state.detail.colorId) {
+          if (variantError) variantError.hidden = false;
+          return;
+        }
+
+        const color = baseModel.isColorCustomizable
+          ? getColorById(state.detail.colorId)
+          : getColorById('blanco');
+        const qty = Math.max(1, parseInt(qtyInput ? qtyInput.value : 1, 10) || 1);
+
         addItemToCart({
-          productId: product.id,
-          productName: product.name,
-          image: product.image,
-          colorId: product.isColorCustomizable ? 'rosa' : 'blanco',
-          colorLabel: product.isColorCustomizable ? 'Rosa Pastel (base)' : 'Blanca completa',
-          unitPrice: product.price,
-          quantity: 1,
+          designId: design.id,
+          designName: design.name,
+          orderAs: design.orderAs,
+          productId: baseModel.id,
+          productName: `${design.name} (${baseModel.shortLabel})`,
+          modelName: baseModel.name,
+          presentation: design.presentation || 'Taza individual (11 oz)',
+          image: design.image,
+          colorId: baseModel.isColorCustomizable ? color.id : 'blanco',
+          colorLabel: baseModel.isColorCustomizable ? color.label : 'Blanca completa',
+          unitPrice: design.price,
+          quantity: qty,
           customization: {
             uploadedImageName: null,
-            notes: 'Versión base'
+            notes: null
           }
         });
+
         closeDetail();
         openCartDrawer();
-        showToast(`«${product.name}» añadida al carrito.`);
+        showToast(`«${design.name}» añadida al carrito.`);
       });
     }
-
-    document.querySelectorAll('[data-view-product]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        openDetail(btn.getAttribute('data-view-product'));
-      });
-    });
 
     document.querySelectorAll('[data-close-detail]').forEach((btn) => {
       btn.addEventListener('click', closeDetail);
@@ -567,6 +963,8 @@
     dialog.addEventListener('click', (e) => {
       if (e.target === dialog) closeDetail();
     });
+
+    window.__openStampaDetail = openDetail;
   }
 
   // =========================================================================
@@ -593,6 +991,7 @@
 
   function addItemToCart(newItem) {
     const signature = JSON.stringify({
+      d: newItem.designId || 'personalizada',
       p: newItem.productId,
       c: newItem.colorId,
       img: newItem.customization ? newItem.customization.uploadedImageName : null,
@@ -643,13 +1042,11 @@
     const cartList = document.getElementById('cartList');
     const cartFooter = document.getElementById('cartFooter');
     const subtotalEl = document.getElementById('cartSubtotalValue');
-    const feedbackEl = document.getElementById('cartActionFeedback');
 
     const totalItems = state.cart.reduce((sum, item) => sum + item.quantity, 0);
     const subtotal = state.cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
 
     if (badge) badge.textContent = String(totalItems);
-    if (feedbackEl) feedbackEl.hidden = true;
 
     if (!cartList || !emptyState || !cartFooter) return;
 
@@ -669,17 +1066,20 @@
     cartList.innerHTML = state.cart
       .map((item) => {
         const c = item.customization || {};
+        const displayTitle = item.designName || item.productName;
         return `
         <li class="cart-item">
-          <img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.productName)}" width="72" height="72" class="cart-item__thumb">
+          <img src="${escapeHtml(item.image)}" alt="${escapeHtml(displayTitle)}" width="72" height="72" class="cart-item__thumb">
           <div>
-            <h3 class="cart-item__title">${escapeHtml(item.productName)}</h3>
+            <h3 class="cart-item__title">${escapeHtml(displayTitle)}</h3>
             <div class="cart-item__meta">
-              <span><strong>Acabado/Color:</strong> ${escapeHtml(item.colorLabel || 'Blanco')}</span>
-              ${c.uploadedImageName ? `<span><strong>Archivo:</strong> ${escapeHtml(c.uploadedImageName)}</span>` : ''}
-              ${c.notes ? `<span><strong>Notas:</strong> ${escapeHtml(c.notes)}</span>` : ''}
+              ${item.orderAs ? `<span><strong>Pídela como:</strong> «${escapeHtml(item.orderAs)}»</span>` : ''}
+              <span><strong>Modelo:</strong> ${escapeHtml(item.modelName || item.productName)}</span>
+              <span><strong>Interior y asa:</strong> ${escapeHtml(item.colorLabel || 'Blanca completa')}</span>
+              ${c.uploadedImageName ? `<span><strong>Imagen a adjuntar en WhatsApp:</strong> ${escapeHtml(c.uploadedImageName)}</span>` : ''}
+              ${c.notes ? `<span><strong>Idea / Notas:</strong> ${escapeHtml(c.notes)}</span>` : ''}
               <span><strong>Precio unitario:</strong> ${formatCurrency(item.unitPrice)}</span>
-              <span><strong>Subtotal:</strong> ${formatCurrency(item.unitPrice * item.quantity)}</span>
+              <span><strong>Subtotal estimado:</strong> ${formatCurrency(item.unitPrice * item.quantity)}</span>
             </div>
             <div class="cart-item__controls">
               <div class="qty-control" role="group" aria-label="Cantidad">
@@ -781,7 +1181,7 @@
         const subtotal = state.cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
         const waUrl = buildWhatsAppQuoteUrl(state.cart, subtotal);
         window.open(waUrl, '_blank', 'noopener,noreferrer');
-        showToast('Abriendo WhatsApp con tu pedido...');
+        showToast('Abriendo WhatsApp con tu solicitud...');
       });
     }
   }
@@ -792,7 +1192,7 @@
   function initScrollAndHeroMotion() {
     if (prefersReducedMotion.matches) return;
 
-    const revealElements = document.querySelectorAll('.reveal-item, .product-card');
+    const revealElements = document.querySelectorAll('.reveal-item');
     if ('IntersectionObserver' in window) {
       const observer = new IntersectionObserver(
         (entries, obs) => {
@@ -876,7 +1276,7 @@
         });
       } else if (location.protocol === 'https:') {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js').catch(() => { });
+          navigator.serviceWorker.register('./sw.js').catch(() => {});
         });
       }
     }
