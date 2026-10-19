@@ -263,15 +263,16 @@
     const startIdx = (state.currentPage - 1) * PAGE_SIZE;
     const pageItems = filtered.slice(startIdx, startIdx + PAGE_SIZE);
 
-    grid.innerHTML = pageItems
-      .map((design) => {
-        const baseModel = getBaseModelById(design.baseModelId);
-        const defaultColor = getColorById(design.defaultColorId);
-        const modelInfoText = baseModel.isColorCustomizable
-          ? `${baseModel.shortLabel} · Interior ${defaultColor.label}`
-          : baseModel.shortLabel;
+    try {
+      grid.innerHTML = pageItems
+        .map((design) => {
+          const baseModel = getBaseModelById(design.baseModelId) || { shortLabel: 'Taza (11 oz)', isColorCustomizable: false };
+          const defaultColor = getColorById(design.defaultColorId) || { label: 'Blanco', colorHex: '#FFFFFF' };
+          const modelInfoText = baseModel && baseModel.isColorCustomizable
+            ? `${baseModel.shortLabel || 'Taza bicolor'} · Interior ${(defaultColor && defaultColor.label) || 'Color'}`
+            : ((baseModel && baseModel.shortLabel) || 'Taza clásica (11 oz)');
 
-        return `
+          return `
         <article class="product-card product-card--${escapeHtml(design.accentTheme || 'sky')}" data-design-id="${escapeHtml(design.id)}">
           <div class="product-card__stage${design.isPhotoCrop ? ' product-card__stage--photo' : ''}">
             <div class="product-card__bg" aria-hidden="true"></div>
@@ -333,6 +334,9 @@
     });
 
     renderPaginationControls(totalItems, totalPages);
+    } catch (err) {
+      console.error('Error renderizando el catálogo StampaDito:', err);
+    }
   }
 
   function renderPaginationControls(totalItems, totalPages) {

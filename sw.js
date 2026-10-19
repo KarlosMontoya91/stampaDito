@@ -8,7 +8,7 @@
  * - Imágenes y recursos gráficos: Stale-While-Revalidate para respuesta instantánea en móvil.
  */
 
-const CACHE_NAME = 'stampadito-prod-v4';
+const CACHE_NAME = 'stampadito-prod-v5';
 const CORE_ASSETS = [
   './',
   './index.html',
