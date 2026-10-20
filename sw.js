@@ -8,7 +8,7 @@
  * - Imágenes y recursos gráficos: Stale-While-Revalidate para respuesta instantánea en móvil.
  */
 
-const CACHE_NAME = 'stampadito-prod-v5';
+const CACHE_NAME = 'stampadito-prod-v6';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -18,6 +18,7 @@ const CORE_ASSETS = [
   './site.webmanifest',
   './assets/favicon.svg',
   './assets/logo-stampadito.svg',
+  './assets/stampadito-share-logo.png',
   './assets/tazas-recortadas/taza-botanica-camila.webp',
   './assets/tazas-recortadas/taza-mascota-bruno.webp',
   './assets/tazas-recortadas/taza-nombre-mateo.webp',

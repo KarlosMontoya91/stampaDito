@@ -669,8 +669,8 @@ window.STAMPADITO_DATA = {
     },
     {
       id: "diseno-logo-estudio-norte",
-      name: "Logo cafetería «Estudio Norte»",
-      orderAs: "Logo cafetería Estudio Norte",
+      name: "Logo Agencia de Diseño «Karlos Montoya»",
+      orderAs: "Logo Agencia de Diseño Karlos Montoya",
       categories: ["para-tu-negocio"],
       categoryLabel: "Para tu negocio",
       baseModelId: "taza-bicolor-fullcolor",
@@ -681,9 +681,27 @@ window.STAMPADITO_DATA = {
       image: "assets/tazas-recortadas/taza-negocio-estudio.webp",
       imageAlt: "Taza bicolor negra con logotipo de grano de café Estudio Norte",
       isPhotoCrop: false,
-      shortDescription: "Diseño limpio con emblema de grano de café y nombre de marca sobre taza con interior negro.",
+      shortDescription: "Diseño limpio con emblema de Logo y nombre de marca sobre taza con interior negro.",
       fullDescription:
-        "Referencia de identidad gráfica para cafeterías, estudios o marcas locales sobre Taza Bicolor de 11 oz con interior y asa negros."
+        "Referencia de identidad gráfica para Agencia de diseño, estudios o marcas locales sobre Taza Bicolor de 11 oz con interior y asa negros."
+    },
+    {
+      id: "diseno-logo-agencia-uxui",
+      name: "Logo Agencia «UX/UI»",
+      orderAs: "Logo Agencia UX/UI",
+      categories: ["para-tu-negocio"],
+      categoryLabel: "Para tu negocio",
+      baseModelId: "taza-bicolor-fullcolor",
+      defaultColorId: "negro",
+      presentation: "Taza individual (11 oz)",
+      price: 200,
+      accentTheme: "mint",
+      image: "assets/tazas-recortadas/taza-geometria-color.webp",
+      imageAlt: "Taza bicolor negra con logotipo de Agencia UX/UI",
+      isPhotoCrop: false,
+      shortDescription: "Diseño limpio con emblema de Logo y nombre de marca sobre taza con interior negro.",
+      fullDescription:
+        "Referencia de identidad gráfica para Agencia de diseño, estudios o marcas locales sobre Taza Bicolor de 11 oz con interior y asa negros."
     }
   ],
 
